@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchFanzaNewVideos } from "@/lib/dmm";
-import { supabaseAdmin } from "@/lib/supabaseAdmin";
+import { getSupabaseAdmin } from "@/lib/supabaseAdmin";
 
 function slugifyGenre(name: string) {
   if (name === "巨乳") return "big-bust";
@@ -15,6 +15,8 @@ function isAuthorized(request: NextRequest) {
 
 async function runFetchJob(request: NextRequest) {
   if (!isAuthorized(request)) return NextResponse.json({ error: "Unauthorized." }, { status: 401 });
+
+  const supabaseAdmin = getSupabaseAdmin();
 
   const logInsert = await supabaseAdmin.from("api_fetch_logs").insert({
     provider: "fanza",
