@@ -1,76 +1,50 @@
 # Sample Flow MVP
 
-FANZA動画を対象にした、片手操作前提のサンプル動画フィードMVPです。
+Next.js / Supabase / Vercel MVP for Sample Flow.
 
-## MVP条件
+## Vercel build note
 
-- サイト名: Sample Flow
-- 対象: FANZA動画のみ
-- 初期ジャンル: 巨乳
-- 条件: 新着 × サンプル動画あり
-- UI: 縦スクロールで次へ、右スワイプで公式商品ページへ
-- 広告: 7本ごとにPRカード
-- 技術: Next.js / Supabase / Vercel / GitHub
+This project pins Next.js to 15.5.6 instead of using `latest`.
+Next.js 16 uses Turbopack for production build by default, and some Vercel deployments may fail with exit code 101 before showing a clear app-level error. Pinning avoids that build-time issue.
 
-## 法令・規約遵守方針
+## Environment variables
 
-- 動画ファイルの保存・編集・再配信は行いません。
-- 公式APIまたは公式提供情報を利用します。
-- 商品ページへの遷移はアフィリエイトリンクを利用します。
-- PR / Affiliate 表記を画面上に表示します。
-- 年齢確認画面を設置しています。
+Set these in Vercel Project Settings > Environment Variables.
 
-## セットアップ
+```env
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
 
-```bash
-npm install
-cp .env.example .env.local
-npm run dev
+CRON_SECRET=
+NEXT_PUBLIC_SITE_URL=https://avsample-flow.com
+
+DMM_API_ID=pending
+DMM_AFFILIATE_ID=pending
 ```
 
 ## Supabase
 
-1. Supabase SQL Editorを開く
-2. `supabase/schema.sql` を貼り付けて実行
-3. `.env.local` にSupabase URL / anon key / service role keyを設定
+Run `supabase/schema.sql` in Supabase SQL Editor.
 
-## DMM / FANZA API
+## Local development
 
-API IDとアフィリエイトIDが発行されたら、`.env.local` に設定してください。
-
-```env
-DMM_API_ID=
-DMM_AFFILIATE_ID=
+```bash
+npm install
+npm run dev
 ```
 
-手動取得テスト:
+## Manual fetch
+
+After DMM/FANZA API credentials are issued:
 
 ```bash
 curl -X POST http://localhost:3000/api/fanza/fetch \
-  -H "x-cron-secret: change_this_to_a_long_random_string"
+  -H "x-cron-secret: local_test_secret"
 ```
 
-## GitHubアップロード
+## Vercel build-safe note
 
-```bash
-git init
-git add .
-git commit -m "Initial Sample Flow MVP"
-git branch -M main
-git remote add origin https://github.com/<your-account>/<your-repo>.git
-git push -u origin main
-```
+This version avoids Supabase server-side reads during `next build`. Feed and ranking data are loaded on the client after deployment, so Vercel build does not need to connect to Supabase views while compiling.
 
-## Vercel環境変数
-
-- NEXT_PUBLIC_SUPABASE_URL
-- NEXT_PUBLIC_SUPABASE_ANON_KEY
-- SUPABASE_SERVICE_ROLE_KEY
-- DMM_API_ID
-- DMM_AFFILIATE_ID
-- CRON_SECRET
-- NEXT_PUBLIC_SITE_URL
-
-## 注意
-
-初期状態ではSEOインデックスを無効にしています。規約表示、年齢確認、クレジット表示、PR表記、APIレスポンス内容の確認後に `app/layout.tsx` のrobotsを変更してください。
+Next.js is pinned to `15.5.7` and React to `19.0.1` to avoid known RSC security warnings affecting older 15.5.x / React 19.0.0 combinations.
