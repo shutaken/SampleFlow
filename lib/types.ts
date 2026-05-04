@@ -27,3 +27,17 @@ export type AdCard = {
   cta_label: string;
   target_url: string | null;
 };
+
+
+export type RankingVideo = {
+  video_id: string;
+  title: string;
+  affiliate_url: string;
+  thumbnail_url: string | null;
+  package_image_url: string | null;
+  release_date: string | null;
+  score: number | null;
+  impressions: number | null;
+  plays: number | null;
+  exits: number | null;
+};
