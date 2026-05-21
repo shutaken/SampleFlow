@@ -1,7 +1,7 @@
 "use client";
 
 import type { FeedVideo } from "@/lib/types";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 type Props = {
   video: FeedVideo;
@@ -11,6 +11,28 @@ type Props = {
 function displayList(items: string[] | null | undefined, fallback: string) {
   if (!items || items.length === 0) return fallback;
   return items.slice(0, 3).join(" / ");
+}
+
+function extractTrustedDmmEmbedSrc(embedHtml: string | null | undefined) {
+  if (!embedHtml) return null;
+
+  const match = embedHtml.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+  const src = match?.[1];
+
+  if (!src) return null;
+
+  try {
+    const url = new URL(src);
+
+    const isDmmLiteVideo =
+      url.protocol === "https:" &&
+      url.hostname === "www.dmm.co.jp" &&
+      url.pathname.startsWith("/litevideo/");
+
+    return isDmmLiteVideo ? url.toString() : null;
+  } catch {
+    return null;
+  }
 }
 
 async function track(
@@ -39,26 +61,38 @@ export default function VideoCard({ video, sessionId }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const startX = useRef<number | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
+
+  const [isActive, setIsActive] = useState(false);
+  const [shouldMountMedia, setShouldMountMedia] = useState(false);
 
   const imageUrl =
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
+
+  const embedSrc = useMemo(
+    () => extractTrustedDmmEmbedSrc(video.sample_embed_html),
+    [video.sample_embed_html]
+  );
 
   useEffect(() => {
     const root = rootRef.current;
     if (!root) return;
 
-    const observer = new IntersectionObserver(
+    const activeObserver = new IntersectionObserver(
       ([entry]) => {
-        const visible = entry.isIntersecting && entry.intersectionRatio > 0.72;
-        setIsVisible(visible);
+        const active = entry.isIntersecting && entry.intersectionRatio > 0.72;
+        setIsActive(active);
 
-        if (visible) {
-          void track("impression", sessionId, video.id);
-          videoRef.current?.play().catch(() => {
-            // Browser autoplay restrictions can reject play(); ignore safely.
+        if (active) {
+          void track("impression", sessionId, video.id, {
+            mediaType: embedSrc ? "official_embed" : "direct_video",
           });
-          void track("play", sessionId, video.id);
+
+          if (!embedSrc) {
+            videoRef.current?.play().catch(() => {
+              // Browser autoplay restrictions can reject play(); ignore safely.
+            });
+            void track("play", sessionId, video.id);
+          }
         } else {
           videoRef.current?.pause();
         }
@@ -66,9 +100,29 @@ export default function VideoCard({ video, sessionId }: Props) {
       { threshold: [0, 0.72, 1] }
     );
 
-    observer.observe(root);
-    return () => observer.disconnect();
-  }, [sessionId, video.id]);
+    const preloadObserver = new IntersectionObserver(
+      ([entry]) => {
+        // Mount the iframe/video slightly before it reaches the center.
+        // This keeps vertical scrolling smooth while avoiding loading every embed at once.
+        if (entry.isIntersecting) {
+          setShouldMountMedia(true);
+        }
+      },
+      {
+        root: null,
+        rootMargin: "720px 0px",
+        threshold: 0.01,
+      }
+    );
+
+    activeObserver.observe(root);
+    preloadObserver.observe(root);
+
+    return () => {
+      activeObserver.disconnect();
+      preloadObserver.disconnect();
+    };
+  }, [sessionId, video.id, embedSrc]);
 
   function openProduct(reason: "swipe_right" | "click_cta") {
     void track(reason, sessionId, video.id);
@@ -104,14 +158,21 @@ export default function VideoCard({ video, sessionId }: Props) {
       aria-label={video.title}
     >
       <div className="media-area">
-        {video.sample_embed_html ? (
-          <iframe
-            className="sample-iframe"
-            srcDoc={video.sample_embed_html}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
-            loading={isVisible ? "eager" : "lazy"}
-            title={video.title}
-          />
+        {embedSrc ? (
+          shouldMountMedia ? (
+            <iframe
+              className="sample-iframe"
+              src={embedSrc}
+              title={video.title}
+              scrolling="no"
+              frameBorder="0"
+              allowFullScreen
+              loading={isActive ? "eager" : "lazy"}
+              referrerPolicy="strict-origin-when-cross-origin"
+            />
+          ) : imageUrl ? (
+            <img className="poster-fallback" src={imageUrl} alt="" />
+          ) : null
         ) : video.sample_movie_url ? (
           <video
             ref={videoRef}
@@ -121,7 +182,7 @@ export default function VideoCard({ video, sessionId }: Props) {
             playsInline
             muted
             loop
-            preload={isVisible ? "auto" : "metadata"}
+            preload={isActive ? "auto" : "metadata"}
             onEnded={() => void track("ended", sessionId, video.id)}
             controls={false}
           />
