@@ -10,6 +10,12 @@ type Props = {
 
 type SwipeReason = "swipe_right" | "click_cta";
 
+type SwipeStart = {
+  x: number;
+  y: number;
+  t: number;
+} | null;
+
 function displayList(items: string[] | null | undefined, fallback: string) {
   if (!items || items.length === 0) return fallback;
   return items.slice(0, 3).join(" / ");
@@ -61,12 +67,7 @@ async function track(
 export default function VideoCard({ video, sessionId }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-
-  const pointerStart = useRef<{
-    x: number;
-    y: number;
-    t: number;
-  } | null>(null);
+  const swipeStart = useRef<SwipeStart>(null);
 
   const [isActive, setIsActive] = useState(false);
 
@@ -100,15 +101,66 @@ export default function VideoCard({ video, sessionId }: Props) {
   }, [sessionId, video.id]);
 
   function openProduct(reason: SwipeReason) {
+    if (!video.affiliate_url) return;
+
     void track(reason, sessionId, video.id);
     void track("exit_to_fanza", sessionId, video.id, { reason });
 
-    // Use assign to keep normal browser history behavior.
     window.location.assign(video.affiliate_url);
   }
 
+  function evaluateSwipe(endX: number, endY: number) {
+    const start = swipeStart.current;
+    if (!start) return;
+
+    const dx = endX - start.x;
+    const dy = endY - start.y;
+    const elapsed = Date.now() - start.t;
+
+    swipeStart.current = null;
+
+    const horizontalEnough = Math.abs(dx) > 58;
+    const mostlyHorizontal = Math.abs(dx) > Math.abs(dy) * 1.08;
+    const quickEnough = elapsed < 1400;
+
+    if (!horizontalEnough || !mostlyHorizontal || !quickEnough) return;
+
+    if (dx > 0) {
+      openProduct("swipe_right");
+      return;
+    }
+
+    void track("skip", sessionId, video.id, { direction: "left" });
+  }
+
+  function onTouchStart(e: React.TouchEvent<HTMLDivElement>) {
+    const touch = e.touches[0];
+    if (!touch) return;
+
+    swipeStart.current = {
+      x: touch.clientX,
+      y: touch.clientY,
+      t: Date.now(),
+    };
+  }
+
+  function onTouchEnd(e: React.TouchEvent<HTMLDivElement>) {
+    const touch = e.changedTouches[0];
+    if (!touch) return;
+
+    evaluateSwipe(touch.clientX, touch.clientY);
+  }
+
+  function onTouchCancel() {
+    swipeStart.current = null;
+  }
+
   function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    pointerStart.current = {
+    // iPhone Chrome/Safari can behave inconsistently around cross-origin
+    // iframes. Touch events above are the primary mobile path.
+    if (e.pointerType === "touch") return;
+
+    swipeStart.current = {
       x: e.clientX,
       y: e.clientY,
       t: Date.now(),
@@ -116,31 +168,12 @@ export default function VideoCard({ video, sessionId }: Props) {
   }
 
   function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    const start = pointerStart.current;
-    if (!start) return;
-
-    const dx = e.clientX - start.x;
-    const dy = e.clientY - start.y;
-    const elapsed = Date.now() - start.t;
-
-    pointerStart.current = null;
-
-    const isRightSwipe = dx > 76 && Math.abs(dx) > Math.abs(dy) * 1.15;
-    const isLeftSwipe = dx < -76 && Math.abs(dx) > Math.abs(dy) * 1.15;
-    const isQuickEnough = elapsed < 1300;
-
-    if (isRightSwipe && isQuickEnough) {
-      openProduct("swipe_right");
-      return;
-    }
-
-    if (isLeftSwipe && isQuickEnough) {
-      void track("skip", sessionId, video.id, { direction: "left" });
-    }
+    if (e.pointerType === "touch") return;
+    evaluateSwipe(e.clientX, e.clientY);
   }
 
   function onPointerCancel() {
-    pointerStart.current = null;
+    swipeStart.current = null;
   }
 
   const activeEmbedHtml =
@@ -184,18 +217,21 @@ export default function VideoCard({ video, sessionId }: Props) {
 
       <div
         className="gesture-layer"
-        aria-label="右スワイプで公式商品ページへ移動"
+        aria-label="右端を右スワイプで公式商品ページへ移動"
+        onTouchStart={onTouchStart}
+        onTouchEnd={onTouchEnd}
+        onTouchCancel={onTouchCancel}
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
         onPointerCancel={onPointerCancel}
       />
 
-      <div className="swipe-hint">→ 公式ページ</div>
+      <div className="swipe-hint">右端 → 公式ページ</div>
 
       <div className="video-info">
         <div className="video-info-head">
           <span className="pr-label">PR</span>
-          <span className="hint">右スワイプで商品ページへ</span>
+          <span className="hint">右端を右スワイプで商品ページへ</span>
         </div>
 
         <h2 className="video-title">{video.title}</h2>
