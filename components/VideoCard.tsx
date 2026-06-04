@@ -19,29 +19,6 @@ function extractIframeSrc(html: string | null | undefined) {
   return match?.[1] ?? null;
 }
 
-function getLiteVideoDetailUrl(video: FeedVideo) {
-  const cid = video.provider_content_id || "";
-  if (!cid) return video.affiliate_url;
-
-  return `https://www.dmm.co.jp/litevideo/-/detail/=/cid=${encodeURIComponent(
-    cid
-  )}/`;
-}
-
-function getProductDestination(video: FeedVideo) {
-  const rawUrl = video.affiliate_url?.trim();
-
-  // Manual seed data may contain:
-  // https://video.dmm.co.jp/av/content/?id=...
-  // This can return 400 depending on environment/session.
-  // Use the stable litevideo detail URL derived from cid.
-  if (!rawUrl || rawUrl.includes("video.dmm.co.jp/av/content/")) {
-    return getLiteVideoDetailUrl(video);
-  }
-
-  return rawUrl;
-}
-
 async function track(
   eventType: string,
   sessionId: string,
@@ -68,12 +45,13 @@ export default function VideoCard({ video, sessionId }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const [showInfo, setShowInfo] = useState(false);
 
   const imageUrl =
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
 
   const iframeSrc = extractIframeSrc(video.sample_embed_html);
-  const destinationUrl = getProductDestination(video);
+  const destinationUrl = video.affiliate_url;
 
   useEffect(() => {
     const root = rootRef.current;
@@ -100,6 +78,21 @@ export default function VideoCard({ video, sessionId }: Props) {
     observer.observe(root);
     return () => observer.disconnect();
   }, [sessionId, video.id]);
+
+  useEffect(() => {
+    if (!isActive) {
+      setShowInfo(false);
+      return;
+    }
+
+    setShowInfo(true);
+
+    const timer = window.setTimeout(() => {
+      setShowInfo(false);
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [isActive, video.id]);
 
   function onProductClick() {
     void track("click_cta", sessionId, video.id, { destination: destinationUrl });
@@ -143,7 +136,7 @@ export default function VideoCard({ video, sessionId }: Props) {
 
       <div className="video-gradient" />
 
-      <div className="video-info">
+      <div className={`video-info ${showInfo ? "is-visible" : ""}`}>
         <div className="video-info-head">
           <span className="pr-label">PR</span>
           <a
