@@ -22,7 +22,7 @@ function extractIframeSrc(html: string | null | undefined) {
 }
 
 function getLiteVideoDetailUrl(video: FeedVideo) {
-  const cid = video.provider_content_id || video.product_id || "";
+  const cid = video.provider_content_id || "";
   if (!cid) return video.affiliate_url;
 
   return `https://www.dmm.co.jp/litevideo/-/detail/=/cid=${encodeURIComponent(
