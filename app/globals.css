@@ -174,8 +174,8 @@ button {
 
 /*
   DMM litevideo embed originally uses a 75% padding wrapper.
-  That means the practical player window is closer to 4:3 than pure 16:9.
-  Using 4:3 prevents the lower control area from being clipped inside the iframe.
+  The practical player window is 4:3-ish, so we keep that ratio to prevent
+  lower player controls from being clipped.
 */
 .sample-iframe {
   display: block;
@@ -221,22 +221,30 @@ button {
   z-index: 3;
   inset: 0;
   background:
-    linear-gradient(to bottom, rgba(0,0,0,0.42), transparent 24%),
-    linear-gradient(to top, rgba(0,0,0,0.18), transparent 18%);
+    linear-gradient(to top, rgba(0,0,0,0.50), transparent 22%),
+    linear-gradient(to bottom, rgba(0,0,0,0.10), transparent 14%);
   pointer-events: none;
 }
 
 /*
-  Keep this information away from the iframe's bottom controls.
+  The info area is back at the bottom.
+  It fades out after each video becomes active so it does not keep covering
+  iframe player controls.
 */
 .video-info {
   position: absolute;
   z-index: 15;
-  top: max(42px, env(safe-area-inset-top));
   left: 14px;
   right: 14px;
-  bottom: auto;
+  bottom: max(14px, env(safe-area-inset-bottom));
   pointer-events: none;
+  opacity: 0;
+  transition: opacity 2s ease;
+}
+
+.video-info.is-visible {
+  opacity: 1;
+  transition: opacity 0.12s ease;
 }
 
 .video-info-head {
@@ -259,8 +267,12 @@ button {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  pointer-events: auto;
+  pointer-events: none;
   box-shadow: 0 6px 20px rgba(0,0,0,0.24);
+}
+
+.video-info.is-visible .product-mini-button {
+  pointer-events: auto;
 }
 
 .product-mini-button:active {
@@ -295,28 +307,15 @@ button {
 }
 
 @media (orientation: landscape) {
-  .topbar {
-    height: 36px;
-    padding: 0 10px;
-  }
-
-  .logo {
-    font-size: 14px;
-  }
-
-  .topbar .pr-label {
-    display: none;
-  }
-
   .video-gradient {
     background:
-      linear-gradient(to bottom, rgba(0,0,0,0.34), transparent 18%);
+      linear-gradient(to top, rgba(0,0,0,0.44), transparent 22%);
   }
 
   .video-info {
-    top: max(34px, env(safe-area-inset-top));
     left: max(10px, env(safe-area-inset-left));
     right: max(10px, env(safe-area-inset-right));
+    bottom: max(8px, env(safe-area-inset-bottom));
   }
 
   .video-title {
