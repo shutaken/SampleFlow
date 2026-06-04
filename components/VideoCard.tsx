@@ -31,10 +31,10 @@ function getLiteVideoDetailUrl(video: FeedVideo) {
 function getProductDestination(video: FeedVideo) {
   const rawUrl = video.affiliate_url?.trim();
 
-  // Manual seed data may contain this URL:
+  // Manual seed data may contain:
   // https://video.dmm.co.jp/av/content/?id=...
-  // It can return 400 depending on environment/session, so use the stable
-  // litevideo detail URL derived from cid.
+  // This can return 400 depending on environment/session.
+  // Use the stable litevideo detail URL derived from cid.
   if (!rawUrl || rawUrl.includes("video.dmm.co.jp/av/content/")) {
     return getLiteVideoDetailUrl(video);
   }
