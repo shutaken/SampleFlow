@@ -10,36 +10,38 @@ type Props = {
 
 type SwipeReason = "swipe_right" | "click_cta";
 
-type SwipeStart = {
-  x: number;
-  y: number;
-  t: number;
-} | null;
-
 function displayList(items: string[] | null | undefined, fallback: string) {
   if (!items || items.length === 0) return fallback;
   return items.slice(0, 3).join(" / ");
 }
 
-function withPlaybackHints(html: string) {
-  // Best-effort only. Cross-origin iframe players cannot be muted/controlled
-  // reliably from the parent page.
-  return html.replace(
-    /src="([^"]+)"/,
-    (_match, src: string) => {
-      try {
-        const url = new URL(src);
-        url.searchParams.set("autoplay", "1");
-        url.searchParams.set("mute", "1");
-        url.searchParams.set("muted", "1");
-        url.searchParams.set("playsinline", "1");
-        return `src="${url.toString()}"`;
-      } catch {
-        const separator = src.includes("?") ? "&" : "?";
-        return `src="${src}${separator}autoplay=1&mute=1&muted=1&playsinline=1"`;
-      }
-    }
-  );
+function extractIframeSrc(html: string | null | undefined) {
+  if (!html) return null;
+  const match = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
+  return match?.[1] ?? null;
+}
+
+function getLiteVideoDetailUrl(video: FeedVideo) {
+  const cid = video.provider_content_id || video.product_id || "";
+  if (!cid) return video.affiliate_url;
+
+  return `https://www.dmm.co.jp/litevideo/-/detail/=/cid=${encodeURIComponent(
+    cid
+  )}/`;
+}
+
+function getProductDestination(video: FeedVideo) {
+  const rawUrl = video.affiliate_url?.trim();
+
+  // The manually seeded URL format
+  // https://video.dmm.co.jp/av/content/?id=...
+  // can return 400 depending on environment/referrer/session.
+  // For manual seed data, use the stable litevideo detail URL derived from cid.
+  if (!rawUrl || rawUrl.includes("video.dmm.co.jp/av/content/")) {
+    return getLiteVideoDetailUrl(video);
+  }
+
+  return rawUrl;
 }
 
 async function track(
@@ -67,12 +69,26 @@ async function track(
 export default function VideoCard({ video, sessionId }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
-  const swipeStart = useRef<SwipeStart>(null);
+
+  const touchStart = useRef<{
+    x: number;
+    y: number;
+    t: number;
+  } | null>(null);
+
+  const mouseStart = useRef<{
+    x: number;
+    y: number;
+    t: number;
+  } | null>(null);
 
   const [isActive, setIsActive] = useState(false);
+  const [showSwipeHint, setShowSwipeHint] = useState(false);
 
   const imageUrl =
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
+
+  const iframeSrc = extractIframeSrc(video.sample_embed_html);
 
   useEffect(() => {
     const root = rootRef.current;
@@ -100,44 +116,60 @@ export default function VideoCard({ video, sessionId }: Props) {
     return () => observer.disconnect();
   }, [sessionId, video.id]);
 
+  useEffect(() => {
+    if (!isActive) {
+      setShowSwipeHint(false);
+      return;
+    }
+
+    setShowSwipeHint(true);
+    const timer = window.setTimeout(() => {
+      setShowSwipeHint(false);
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [isActive, video.id]);
+
   function openProduct(reason: SwipeReason) {
-    if (!video.affiliate_url) return;
+    const destination = getProductDestination(video);
 
-    void track(reason, sessionId, video.id);
-    void track("exit_to_fanza", sessionId, video.id, { reason });
+    void track(reason, sessionId, video.id, { destination });
+    void track("exit_to_fanza", sessionId, video.id, { reason, destination });
 
-    window.location.assign(video.affiliate_url);
+    window.location.assign(destination);
   }
 
-  function evaluateSwipe(endX: number, endY: number) {
-    const start = swipeStart.current;
+  function finishSwipe(
+    start: { x: number; y: number; t: number } | null,
+    endX: number,
+    endY: number
+  ) {
     if (!start) return;
 
     const dx = endX - start.x;
     const dy = endY - start.y;
     const elapsed = Date.now() - start.t;
 
-    swipeStart.current = null;
+    const isHorizontal = Math.abs(dx) > Math.abs(dy) * 1.05;
+    const isRightSwipe = dx > 58 && isHorizontal;
+    const isLeftSwipe = dx < -72 && isHorizontal;
+    const isQuickEnough = elapsed < 1600;
 
-    const horizontalEnough = Math.abs(dx) > 58;
-    const mostlyHorizontal = Math.abs(dx) > Math.abs(dy) * 1.08;
-    const quickEnough = elapsed < 1400;
-
-    if (!horizontalEnough || !mostlyHorizontal || !quickEnough) return;
-
-    if (dx > 0) {
+    if (isRightSwipe && isQuickEnough) {
       openProduct("swipe_right");
       return;
     }
 
-    void track("skip", sessionId, video.id, { direction: "left" });
+    if (isLeftSwipe && isQuickEnough) {
+      void track("skip", sessionId, video.id, { direction: "left" });
+    }
   }
 
   function onTouchStart(e: React.TouchEvent<HTMLDivElement>) {
     const touch = e.touches[0];
     if (!touch) return;
 
-    swipeStart.current = {
+    touchStart.current = {
       x: touch.clientX,
       y: touch.clientY,
       t: Date.now(),
@@ -148,50 +180,41 @@ export default function VideoCard({ video, sessionId }: Props) {
     const touch = e.changedTouches[0];
     if (!touch) return;
 
-    evaluateSwipe(touch.clientX, touch.clientY);
+    finishSwipe(touchStart.current, touch.clientX, touch.clientY);
+    touchStart.current = null;
   }
 
   function onTouchCancel() {
-    swipeStart.current = null;
+    touchStart.current = null;
   }
 
-  function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
-    // iPhone Chrome/Safari can behave inconsistently around cross-origin
-    // iframes. Touch events above are the primary mobile path.
-    if (e.pointerType === "touch") return;
-
-    swipeStart.current = {
+  function onMouseDown(e: React.MouseEvent<HTMLDivElement>) {
+    mouseStart.current = {
       x: e.clientX,
       y: e.clientY,
       t: Date.now(),
     };
   }
 
-  function onPointerUp(e: React.PointerEvent<HTMLDivElement>) {
-    if (e.pointerType === "touch") return;
-    evaluateSwipe(e.clientX, e.clientY);
+  function onMouseUp(e: React.MouseEvent<HTMLDivElement>) {
+    finishSwipe(mouseStart.current, e.clientX, e.clientY);
+    mouseStart.current = null;
   }
 
-  function onPointerCancel() {
-    swipeStart.current = null;
+  function onMouseLeave() {
+    mouseStart.current = null;
   }
-
-  const activeEmbedHtml =
-    isActive && video.sample_embed_html
-      ? withPlaybackHints(video.sample_embed_html)
-      : null;
 
   return (
     <article ref={rootRef} className="video-card" aria-label={video.title}>
       <div className="media-area">
-        {activeEmbedHtml ? (
+        {isActive && iframeSrc ? (
           <iframe
             className="sample-iframe"
-            srcDoc={activeEmbedHtml}
-            sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox"
+            src={iframeSrc}
             loading="eager"
             title={video.title}
-            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
+            allow="fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
           />
         ) : isActive && video.sample_movie_url ? (
@@ -217,21 +240,22 @@ export default function VideoCard({ video, sessionId }: Props) {
 
       <div
         className="gesture-layer"
-        aria-label="右端を右スワイプで公式商品ページへ移動"
+        aria-label="右スワイプで公式ページへ"
         onTouchStart={onTouchStart}
         onTouchEnd={onTouchEnd}
         onTouchCancel={onTouchCancel}
-        onPointerDown={onPointerDown}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerCancel}
+        onMouseDown={onMouseDown}
+        onMouseUp={onMouseUp}
+        onMouseLeave={onMouseLeave}
       />
 
-      <div className="swipe-hint">右端 → 公式ページ</div>
+      <div className={`swipe-hint ${showSwipeHint ? "is-visible" : ""}`}>
+        右スワイプで公式ページへ
+      </div>
 
       <div className="video-info">
         <div className="video-info-head">
           <span className="pr-label">PR</span>
-          <span className="hint">右端を右スワイプで商品ページへ</span>
         </div>
 
         <h2 className="video-title">{video.title}</h2>
