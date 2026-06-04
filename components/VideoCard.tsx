@@ -29,7 +29,16 @@ function extractTrustedDmmEmbedSrc(embedHtml: string | null | undefined) {
       url.hostname === "www.dmm.co.jp" &&
       url.pathname.startsWith("/litevideo/");
 
-    return isDmmLiteVideo ? url.toString() : null;
+    if (!isDmmLiteVideo) return null;
+
+    // Best-effort only: if DMM's player ignores these parameters, they are harmless.
+    // The reliable stop mechanism is unmounting the iframe when the card leaves view.
+    url.searchParams.set("autoplay", "1");
+    url.searchParams.set("muted", "1");
+    url.searchParams.set("mute", "1");
+    url.searchParams.set("playsinline", "1");
+
+    return url.toString();
   } catch {
     return null;
   }
@@ -61,9 +70,9 @@ export default function VideoCard({ video, sessionId }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const startX = useRef<number | null>(null);
+  const startY = useRef<number | null>(null);
 
   const [isActive, setIsActive] = useState(false);
-  const [shouldMountMedia, setShouldMountMedia] = useState(false);
 
   const imageUrl =
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
@@ -77,7 +86,7 @@ export default function VideoCard({ video, sessionId }: Props) {
     const root = rootRef.current;
     if (!root) return;
 
-    const activeObserver = new IntersectionObserver(
+    const observer = new IntersectionObserver(
       ([entry]) => {
         const active = entry.isIntersecting && entry.intersectionRatio > 0.72;
         setIsActive(active);
@@ -94,80 +103,86 @@ export default function VideoCard({ video, sessionId }: Props) {
             void track("play", sessionId, video.id);
           }
         } else {
+          // Direct video can be paused. Official iframe cannot be controlled cross-origin,
+          // so it is unmounted by render when inactive.
           videoRef.current?.pause();
         }
       },
       { threshold: [0, 0.72, 1] }
     );
 
-    const preloadObserver = new IntersectionObserver(
-      ([entry]) => {
-        // Mount the iframe/video slightly before it reaches the center.
-        // This keeps vertical scrolling smooth while avoiding loading every embed at once.
-        if (entry.isIntersecting) {
-          setShouldMountMedia(true);
-        }
-      },
-      {
-        root: null,
-        rootMargin: "720px 0px",
-        threshold: 0.01,
-      }
-    );
-
-    activeObserver.observe(root);
-    preloadObserver.observe(root);
-
-    return () => {
-      activeObserver.disconnect();
-      preloadObserver.disconnect();
-    };
+    observer.observe(root);
+    return () => observer.disconnect();
   }, [sessionId, video.id, embedSrc]);
 
-  function openProduct(reason: "swipe_right" | "click_cta") {
-    void track(reason, sessionId, video.id);
-    void track("exit_to_fanza", sessionId, video.id, { reason });
+  useEffect(() => {
+    if (!videoRef.current) return;
+
+    videoRef.current.muted = true;
+
+    if (isActive && !embedSrc) {
+      videoRef.current.play().catch(() => {
+        // no-op
+      });
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isActive, embedSrc]);
+
+  function openProduct() {
+    void track("swipe_right", sessionId, video.id);
+    void track("exit_to_fanza", sessionId, video.id, { reason: "swipe_right" });
     window.location.href = video.affiliate_url;
   }
 
   function onTouchStart(e: React.TouchEvent<HTMLElement>) {
     startX.current = e.touches[0]?.clientX ?? null;
+    startY.current = e.touches[0]?.clientY ?? null;
   }
 
   function onTouchEnd(e: React.TouchEvent<HTMLElement>) {
-    if (startX.current === null) return;
+    if (startX.current === null || startY.current === null) return;
 
     const endX = e.changedTouches[0]?.clientX ?? startX.current;
-    const diff = endX - startX.current;
+    const endY = e.changedTouches[0]?.clientY ?? startY.current;
+    const diffX = endX - startX.current;
+    const diffY = endY - startY.current;
 
-    if (diff > 84) {
-      openProduct("swipe_right");
-    } else if (diff < -84) {
+    // Prevent accidental transitions during normal vertical scrolling.
+    const isIntentionalRightSwipe = diffX > 92 && Math.abs(diffX) > Math.abs(diffY) * 1.3;
+    const isIntentionalLeftSwipe = diffX < -92 && Math.abs(diffX) > Math.abs(diffY) * 1.3;
+
+    if (isIntentionalRightSwipe) {
+      openProduct();
+    } else if (isIntentionalLeftSwipe) {
       void track("skip", sessionId, video.id, { direction: "left" });
     }
 
     startX.current = null;
+    startY.current = null;
   }
 
   return (
     <article
       ref={rootRef}
-      className="video-card"
+      className={`video-card ${isActive ? "is-active" : ""}`}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
       aria-label={video.title}
     >
       <div className="media-area">
         {embedSrc ? (
-          shouldMountMedia ? (
+          isActive ? (
             <iframe
+              key={`${video.id}-active`}
               className="sample-iframe"
               src={embedSrc}
               title={video.title}
               scrolling="no"
               frameBorder="0"
+              allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
               allowFullScreen
-              loading={isActive ? "eager" : "lazy"}
+              loading="eager"
               referrerPolicy="strict-origin-when-cross-origin"
             />
           ) : imageUrl ? (
@@ -181,6 +196,7 @@ export default function VideoCard({ video, sessionId }: Props) {
             poster={imageUrl}
             playsInline
             muted
+            autoPlay={isActive}
             loop
             preload={isActive ? "auto" : "metadata"}
             onEnded={() => void track("ended", sessionId, video.id)}
@@ -192,27 +208,18 @@ export default function VideoCard({ video, sessionId }: Props) {
       </div>
 
       <div className="video-gradient" />
-      <div className="swipe-hint">右スワイプで商品ページへ</div>
+      <div className="swipe-hint" aria-hidden="true">→ 公式ページ</div>
 
       <div className="video-info">
-        <span className="pr-label">PR</span>
+        <div className="info-topline">
+          <span className="pr-label">PR</span>
+          <span className="gesture-copy">右スワイプで商品ページへ</span>
+        </div>
         <h2 className="video-title">{video.title}</h2>
         <div className="meta">
           {displayList(video.actresses, "出演者情報なし")}
           <br />
-          {video.maker_name ?? "メーカー情報なし"} ·{" "}
-          {displayList(video.genres, "ジャンル")}
-        </div>
-
-        <div className="cta-row">
-          <button
-            className="cta"
-            onClick={() => openProduct("click_cta")}
-            type="button"
-          >
-            公式商品ページへ
-          </button>
-          <span className="hint">片手操作</span>
+          {video.maker_name ?? "メーカー情報なし"} · {displayList(video.genres, "ジャンル")}
         </div>
       </div>
     </article>
