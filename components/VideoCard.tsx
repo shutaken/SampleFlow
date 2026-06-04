@@ -94,6 +94,16 @@ export default function VideoCard({ video, sessionId }: Props) {
     return () => window.clearTimeout(timer);
   }, [isActive, video.id]);
 
+  function revealInfo() {
+    setShowInfo(true);
+  }
+
+  function hideInfoAfterDelay() {
+    window.setTimeout(() => {
+      setShowInfo(false);
+    }, 1200);
+  }
+
   function onProductClick() {
     void track("click_cta", sessionId, video.id, { destination: destinationUrl });
     void track("exit_to_fanza", sessionId, video.id, {
@@ -136,7 +146,22 @@ export default function VideoCard({ video, sessionId }: Props) {
 
       <div className="video-gradient" />
 
-      <div className={`video-info ${showInfo ? "is-visible" : ""}`}>
+      <button
+        className="video-info-hover-zone"
+        type="button"
+        aria-label="商品詳細とタイトルを表示"
+        onMouseEnter={revealInfo}
+        onFocus={revealInfo}
+        onTouchStart={revealInfo}
+        onClick={revealInfo}
+      />
+
+      <div
+        className={`video-info ${showInfo ? "is-visible" : ""}`}
+        onMouseEnter={revealInfo}
+        onMouseLeave={hideInfoAfterDelay}
+        onFocus={revealInfo}
+      >
         <div className="video-info-head">
           <span className="pr-label">PR</span>
           <a
