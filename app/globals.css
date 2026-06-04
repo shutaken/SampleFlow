@@ -227,24 +227,19 @@ button {
 }
 
 /*
-  The info area is back at the bottom.
-  It fades out after each video becomes active so it does not keep covering
-  iframe player controls.
+  Portrait:
+  Keep product detail and title always visible.
 */
 .video-info {
   position: absolute;
   z-index: 15;
   left: 14px;
-  right: 14px;
+  right: auto;
+  width: min(760px, calc(100vw - 28px));
   bottom: max(14px, env(safe-area-inset-bottom));
-  pointer-events: none;
-  opacity: 0;
-  transition: opacity 2s ease;
-}
-
-.video-info.is-visible {
+  pointer-events: auto;
   opacity: 1;
-  transition: opacity 0.12s ease;
+  transition: none;
 }
 
 .video-info-head {
@@ -267,12 +262,8 @@ button {
   font-size: 11px;
   font-weight: 700;
   letter-spacing: -0.01em;
-  pointer-events: none;
-  box-shadow: 0 6px 20px rgba(0,0,0,0.24);
-}
-
-.video-info.is-visible .product-mini-button {
   pointer-events: auto;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.24);
 }
 
 .product-mini-button:active {
@@ -306,6 +297,12 @@ button {
   text-shadow: 0 2px 12px rgba(0,0,0,0.7);
 }
 
+/*
+  Landscape:
+  Show the info area only briefly after switching videos.
+  Then fade it out over 2 seconds.
+  On pointer devices, hovering the info area brings it back.
+*/
 @media (orientation: landscape) {
   .video-gradient {
     background:
@@ -314,8 +311,19 @@ button {
 
   .video-info {
     left: max(10px, env(safe-area-inset-left));
-    right: max(10px, env(safe-area-inset-right));
+    right: auto;
     bottom: max(8px, env(safe-area-inset-bottom));
+    width: min(58vw, 560px);
+    opacity: 0;
+    pointer-events: auto;
+    transition: opacity 2s ease;
+  }
+
+  .video-info.is-visible,
+  .video-info:hover,
+  .video-info:focus-within {
+    opacity: 1;
+    transition: opacity 0.12s ease;
   }
 
   .video-title {
