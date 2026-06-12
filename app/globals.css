@@ -489,9 +489,16 @@ button {
   padding: 7px 12px 9px;
   background: linear-gradient(to bottom, rgba(0,0,0,0.40), transparent);
   scrollbar-width: none;
+  opacity: 1;
+  pointer-events: auto;
+  transition: none;
 }
 
 .genre-chip-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.genre-chip-hover-zone {
   display: none;
 }
 
@@ -520,6 +527,35 @@ button {
   .genre-chip-bar {
     top: 42px;
     padding: 5px 10px 7px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 2s ease;
+  }
+
+  .genre-chip-bar.is-visible,
+  .genre-chip-bar:hover,
+  .genre-chip-bar:focus-within,
+  .feed-shell:has(.genre-chip-hover-zone:hover) .genre-chip-bar,
+  .feed-shell:has(.genre-chip-hover-zone:focus) .genre-chip-bar {
+    opacity: 1;
+    pointer-events: auto;
+    transition: opacity 0.12s ease;
+  }
+
+  .genre-chip-hover-zone {
+    display: block;
+    position: fixed;
+    z-index: 27;
+    top: 42px;
+    left: max(0px, env(safe-area-inset-left));
+    width: min(18vw, 172px);
+    height: min(13vh, 58px);
+    border: 0;
+    padding: 0;
+    background: transparent;
+    appearance: none;
+    -webkit-appearance: none;
+    cursor: default;
   }
 
   .genre-chip {
