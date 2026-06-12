@@ -10,6 +10,19 @@ type FeedItem =
   | { type: "video"; video: FeedVideo; key: string }
   | { type: "ad"; ad: AdCard | null; key: string };
 
+type GenreRow = {
+  name: string;
+  slug: string | null;
+};
+
+type Props = {
+  actressName?: string | null;
+  showGenreChips?: boolean;
+  titlePrefix?: string | null;
+};
+
+const PRIORITY_GENRES = ["巨乳", "新人", "制服", "人妻", "VR", "フェチ"];
+
 function getSessionId() {
   if (typeof window === "undefined") return "server";
   const key = "sample_flow_session_id";
@@ -21,11 +34,68 @@ function getSessionId() {
   return id;
 }
 
-export default function Feed() {
+function getInitialGenre() {
+  if (typeof window === "undefined") return "";
+  return new URLSearchParams(window.location.search).get("genre") ?? "";
+}
+
+function sortGenres(rows: GenreRow[]) {
+  return [...rows].sort((a, b) => {
+    const ai = PRIORITY_GENRES.indexOf(a.name);
+    const bi = PRIORITY_GENRES.indexOf(b.name);
+
+    if (ai !== -1 || bi !== -1) {
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
+
+    return a.name.localeCompare(b.name, "ja");
+  });
+}
+
+export default function Feed({
+  actressName = null,
+  showGenreChips = true,
+  titlePrefix = null,
+}: Props) {
   const sessionId = useMemo(() => getSessionId(), []);
   const [videos, setVideos] = useState<FeedVideo[]>([]);
   const [adCards, setAdCards] = useState<AdCard[]>([]);
+  const [genres, setGenres] = useState<GenreRow[]>([]);
+  const [selectedGenre, setSelectedGenre] = useState("");
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setSelectedGenre(getInitialGenre());
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+
+    async function loadGenres() {
+      const { data, error } = await supabase
+        .from("genres")
+        .select("name, slug")
+        .eq("is_active", true);
+
+      if (error) {
+        console.error(error);
+        return;
+      }
+
+      if (!mounted) return;
+      setGenres(sortGenres((data ?? []) as GenreRow[]));
+    }
+
+    if (showGenreChips) {
+      void loadGenres();
+    }
+
+    return () => {
+      mounted = false;
+    };
+  }, [showGenreChips]);
 
   useEffect(() => {
     let mounted = true;
@@ -33,13 +103,22 @@ export default function Feed() {
     async function load() {
       setLoading(true);
 
-      const { data: videoRows, error } = await supabase
+      let query = supabase
         .from("feed_videos")
         .select("*")
-        .contains("genres", ["巨乳"])
         .order("release_date", { ascending: false, nullsFirst: false })
         .order("created_at", { ascending: false })
-        .limit(70);
+        .limit(100);
+
+      if (selectedGenre) {
+        query = query.contains("genres", [selectedGenre]);
+      }
+
+      if (actressName) {
+        query = query.contains("actresses", [actressName]);
+      }
+
+      const { data: videoRows, error } = await query;
 
       if (error) console.error(error);
 
@@ -57,11 +136,12 @@ export default function Feed() {
       setLoading(false);
     }
 
-    load();
+    void load();
+
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [selectedGenre, actressName]);
 
   const items = useMemo(() => {
     const result: FeedItem[] = [];
@@ -77,12 +157,51 @@ export default function Feed() {
     return result;
   }, [videos, adCards]);
 
+  function selectGenre(genreName: string) {
+    setSelectedGenre(genreName);
+
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      if (genreName) {
+        url.searchParams.set("genre", genreName);
+      } else {
+        url.searchParams.delete("genre");
+      }
+      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+    }
+  }
+
   return (
-    <div className="feed-shell">
+    <div className={`feed-shell ${showGenreChips ? "has-genre-chips" : ""}`}>
       <header className="topbar">
         <a href="/feed" className="logo">Sample Flow</a>
-        <span className="pr-label">PR / 巨乳・新着</span>
+        <nav className="topbar-nav" aria-label="メインナビゲーション">
+          {titlePrefix ? <span className="topbar-title">{titlePrefix}</span> : null}
+          <a href="/actresses" className="topbar-link">女優一覧</a>
+        </nav>
       </header>
+
+      {showGenreChips ? (
+        <nav className="genre-chip-bar" aria-label="ジャンル切り替え">
+          <button
+            type="button"
+            className={`genre-chip ${selectedGenre === "" ? "is-active" : ""}`}
+            onClick={() => selectGenre("")}
+          >
+            すべて
+          </button>
+          {genres.map((genre) => (
+            <button
+              type="button"
+              key={genre.name}
+              className={`genre-chip ${selectedGenre === genre.name ? "is-active" : ""}`}
+              onClick={() => selectGenre(genre.name)}
+            >
+              {genre.name}
+            </button>
+          ))}
+        </nav>
+      ) : null}
 
       <main className="feed">
         {loading ? (
@@ -96,9 +215,9 @@ export default function Feed() {
         ) : items.length === 0 ? (
           <section className="feed-item">
             <div className="pr-card">
-              <span className="pr-label">PR</span>
-              <h2>動画データがまだありません</h2>
-              <p>DMM/FANZA API ID発行後に取得バッチを実行すると、ここに新着サンプルが表示されます。</p>
+              <span className="pr-label">No results</span>
+              <h2>動画が見つかりません</h2>
+              <p>別のジャンル、または女優一覧から選び直してください。</p>
             </div>
           </section>
         ) : (
