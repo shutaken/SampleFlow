@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import type { AdCard, FeedVideo } from "@/lib/types";
 import PrCard from "./PrCard";
@@ -60,14 +60,42 @@ export default function Feed({
   titlePrefix = null,
 }: Props) {
   const sessionId = useMemo(() => getSessionId(), []);
+  const genreTimerRef = useRef<number | null>(null);
   const [videos, setVideos] = useState<FeedVideo[]>([]);
   const [adCards, setAdCards] = useState<AdCard[]>([]);
   const [genres, setGenres] = useState<GenreRow[]>([]);
   const [selectedGenre, setSelectedGenre] = useState("");
+  const [showGenreMenu, setShowGenreMenu] = useState(true);
   const [loading, setLoading] = useState(true);
+
+  function clearGenreTimer() {
+    if (genreTimerRef.current !== null) {
+      window.clearTimeout(genreTimerRef.current);
+      genreTimerRef.current = null;
+    }
+  }
+
+  function revealGenreMenu() {
+    clearGenreTimer();
+    setShowGenreMenu(true);
+  }
+
+  function hideGenreMenuAfterDelay(delay = 1200) {
+    clearGenreTimer();
+    genreTimerRef.current = window.setTimeout(() => {
+      setShowGenreMenu(false);
+      genreTimerRef.current = null;
+    }, delay);
+  }
 
   useEffect(() => {
     setSelectedGenre(getInitialGenre());
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      clearGenreTimer();
+    };
   }, []);
 
   useEffect(() => {
@@ -96,6 +124,17 @@ export default function Feed({
       mounted = false;
     };
   }, [showGenreChips]);
+
+  useEffect(() => {
+    if (!showGenreChips) return;
+
+    revealGenreMenu();
+    const timer = window.setTimeout(() => {
+      setShowGenreMenu(false);
+    }, 700);
+
+    return () => window.clearTimeout(timer);
+  }, [showGenreChips, selectedGenre, actressName]);
 
   useEffect(() => {
     let mounted = true;
@@ -159,6 +198,8 @@ export default function Feed({
 
   function selectGenre(genreName: string) {
     setSelectedGenre(genreName);
+    revealGenreMenu();
+    hideGenreMenuAfterDelay(1600);
 
     if (typeof window !== "undefined") {
       const url = new URL(window.location.href);
@@ -182,25 +223,43 @@ export default function Feed({
       </header>
 
       {showGenreChips ? (
-        <nav className="genre-chip-bar" aria-label="ジャンル切り替え">
+        <>
           <button
+            className="genre-chip-hover-zone"
             type="button"
-            className={`genre-chip ${selectedGenre === "" ? "is-active" : ""}`}
-            onClick={() => selectGenre("")}
+            aria-label="ジャンルメニューを表示"
+            onMouseEnter={revealGenreMenu}
+            onFocus={revealGenreMenu}
+            onTouchStart={revealGenreMenu}
+            onClick={revealGenreMenu}
+          />
+
+          <nav
+            className={`genre-chip-bar ${showGenreMenu ? "is-visible" : ""}`}
+            aria-label="ジャンル切り替え"
+            onMouseEnter={revealGenreMenu}
+            onMouseLeave={() => hideGenreMenuAfterDelay()}
+            onFocus={revealGenreMenu}
           >
-            すべて
-          </button>
-          {genres.map((genre) => (
             <button
               type="button"
-              key={genre.name}
-              className={`genre-chip ${selectedGenre === genre.name ? "is-active" : ""}`}
-              onClick={() => selectGenre(genre.name)}
+              className={`genre-chip ${selectedGenre === "" ? "is-active" : ""}`}
+              onClick={() => selectGenre("")}
             >
-              {genre.name}
+              すべて
             </button>
-          ))}
-        </nav>
+            {genres.map((genre) => (
+              <button
+                type="button"
+                key={genre.name}
+                className={`genre-chip ${selectedGenre === genre.name ? "is-active" : ""}`}
+                onClick={() => selectGenre(genre.name)}
+              >
+                {genre.name}
+              </button>
+            ))}
+          </nav>
+        </>
       ) : null}
 
       <main className="feed">
