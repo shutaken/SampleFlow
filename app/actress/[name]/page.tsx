@@ -15,7 +15,7 @@ export default async function ActressFeedPage({ params }: PageProps) {
   return (
     <Feed
       actressName={actressName}
-      showGenreChips={false}
+      showGenreChips
       titlePrefix={actressName}
     />
   );
