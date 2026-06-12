@@ -440,3 +440,208 @@ button {
   object-fit: cover;
   border-radius: 14px;
 }
+
+/* =========================================================
+   Genre chips / top navigation
+   ========================================================= */
+
+.topbar-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar-link,
+.topbar-title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
+  padding: 5px 10px;
+  background: rgba(0,0,0,0.24);
+  color: rgba(255,255,255,0.82);
+  backdrop-filter: blur(10px);
+  font-size: 12px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.topbar-title {
+  max-width: min(38vw, 260px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.genre-chip-bar {
+  position: fixed;
+  z-index: 28;
+  top: 48px;
+  left: 0;
+  right: 0;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 7px 12px 9px;
+  background: linear-gradient(to bottom, rgba(0,0,0,0.40), transparent);
+  scrollbar-width: none;
+}
+
+.genre-chip-bar::-webkit-scrollbar {
+  display: none;
+}
+
+.genre-chip {
+  flex: 0 0 auto;
+  border: 1px solid rgba(255,255,255,0.18);
+  border-radius: 999px;
+  padding: 7px 12px;
+  background: rgba(0,0,0,0.24);
+  color: rgba(255,255,255,0.78);
+  backdrop-filter: blur(12px);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.genre-chip.is-active {
+  border-color: rgba(255,255,255,0.72);
+  background: rgba(255,255,255,0.88);
+  color: #09090b;
+  font-weight: 700;
+}
+
+@media (orientation: landscape) {
+  .genre-chip-bar {
+    top: 42px;
+    padding: 5px 10px 7px;
+  }
+
+  .genre-chip {
+    padding: 5px 10px;
+    font-size: 11px;
+  }
+}
+
+/* =========================================================
+   Actress list
+   ========================================================= */
+
+.list-page {
+  min-height: 100dvh;
+  padding: 26px 16px 44px;
+  background:
+    radial-gradient(circle at top, rgba(255,255,255,0.08), transparent 32%),
+    #080808;
+}
+
+.list-header,
+.search-panel,
+.actress-grid,
+.list-empty {
+  width: min(960px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.list-header {
+  margin-bottom: 18px;
+}
+
+.list-header h1 {
+  margin: 14px 0 8px;
+  font-size: clamp(30px, 7vw, 54px);
+  line-height: 1;
+  letter-spacing: -0.07em;
+}
+
+.list-header p {
+  margin: 0;
+  color: rgba(255,255,255,0.66);
+  line-height: 1.7;
+}
+
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  border: 1px solid rgba(255,255,255,0.16);
+  border-radius: 999px;
+  padding: 6px 12px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.84);
+  font-size: 13px;
+}
+
+.search-panel {
+  position: sticky;
+  z-index: 5;
+  top: 0;
+  padding: 10px 0 14px;
+  background: linear-gradient(to bottom, #080808 70%, rgba(8,8,8,0));
+}
+
+.search-input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid rgba(255,255,255,0.14);
+  border-radius: 18px;
+  padding: 0 15px;
+  outline: none;
+  background: rgba(255,255,255,0.08);
+  color: #f4f4f5;
+  font-size: 16px;
+}
+
+.search-input::placeholder {
+  color: rgba(255,255,255,0.42);
+}
+
+.actress-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 10px;
+}
+
+.actress-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 58px;
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 18px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.06);
+}
+
+.actress-card:active {
+  transform: translateY(1px);
+}
+
+.actress-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 700;
+}
+
+.actress-count {
+  flex: 0 0 auto;
+  color: rgba(255,255,255,0.60);
+  font-size: 12px;
+}
+
+.list-empty {
+  border: 1px solid rgba(255,255,255,0.12);
+  border-radius: 20px;
+  padding: 18px;
+  background: rgba(255,255,255,0.06);
+  color: rgba(255,255,255,0.72);
+}
