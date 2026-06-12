@@ -291,6 +291,10 @@ export default function Feed({
           ))
         )}
       </main>
+
+      <footer className="affiliate-footer" aria-label="アフィリエイトに関するお知らせ">
+        当サイトはアフィリエイト広告を利用しています。
+      </footer>
     </div>
   );
 }

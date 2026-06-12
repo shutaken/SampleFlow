@@ -8,9 +8,17 @@ type Props = {
   sessionId: string;
 };
 
-function displayList(items: string[] | null | undefined, fallback: string) {
-  if (!items || items.length === 0) return fallback;
-  return items.slice(0, 3).join(" / ");
+function visibleItems(items: string[] | null | undefined) {
+  if (!items || items.length === 0) return [];
+  return items.filter(Boolean).slice(0, 5);
+}
+
+function hrefForActress(name: string) {
+  return `/actress/${encodeURIComponent(name)}`;
+}
+
+function hrefForGenre(name: string) {
+  return `/feed?genre=${encodeURIComponent(name)}`;
 }
 
 function extractIframeSrc(html: string | null | undefined) {
@@ -163,7 +171,6 @@ export default function VideoCard({ video, sessionId }: Props) {
         onFocus={revealInfo}
       >
         <div className="video-info-head">
-          <span className="pr-label">PR</span>
           <a
             className="product-mini-button"
             href={destinationUrl}
@@ -171,17 +178,28 @@ export default function VideoCard({ video, sessionId }: Props) {
             rel="sponsored nofollow noopener noreferrer"
             onClick={onProductClick}
           >
-            商品詳細
+            続きを見る
           </a>
         </div>
 
         <h2 className="video-title">{video.title}</h2>
 
-        <div className="meta">
-          {displayList(video.actresses, "出演者情報なし")}
-          <br />
-          {video.maker_name ?? "メーカー情報なし"} ·{" "}
-          {displayList(video.genres, "ジャンル")}
+        <div className="meta meta-links" aria-label="女優名とジャンル">
+          <div className="meta-link-row">
+            {visibleItems(video.actresses).map((name) => (
+              <a className="meta-link-chip" href={hrefForActress(name)} key={`actress-${name}`}>
+                {name}
+              </a>
+            ))}
+          </div>
+
+          <div className="meta-link-row">
+            {visibleItems(video.genres).map((name) => (
+              <a className="meta-link-chip" href={hrefForGenre(name)} key={`genre-${name}`}>
+                #{name}
+              </a>
+            ))}
+          </div>
         </div>
       </div>
     </article>
