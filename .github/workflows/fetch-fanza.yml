@@ -39,7 +39,6 @@ jobs:
         env:
           SAMPLE_FLOW_SITE_URL: ${{ secrets.SAMPLE_FLOW_SITE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
-          # Optional. Required only when Vercel Deployment Protection / Bot Protection returns 401 before the API route.
           VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           MODE: ${{ github.event.inputs.mode || 'daily' }}
           GENRES: ${{ github.event.inputs.genres || '' }}
@@ -62,23 +61,22 @@ jobs:
           URL="${BASE_URL}/api/fanza/fetch?mode=${MODE}&hitsPerGenre=${HITS_PER_GENRE}&refreshLimit=${REFRESH_LIMIT}"
 
           if [ -n "${GENRES:-}" ]; then
-            ENCODED_GENRES="$(python3 - <<'PY'
-import os
-from urllib.parse import quote
-print(quote(os.environ.get("GENRES", ""), safe=""))
-PY
-)"
+            ENCODED_GENRES="$(python3 -c 'import os, urllib.parse; print(urllib.parse.quote(os.environ.get("GENRES", ""), safe=""))')"
             URL="${URL}&genres=${ENCODED_GENRES}"
           fi
 
-          HEADERS=(
+          CURL_ARGS=(
+            -sS
+            -L
+            -X POST
+            "${URL}"
             -H "content-type: application/json"
             -H "x-cron-secret: ${CRON_SECRET}"
             -H "Authorization: Bearer ${CRON_SECRET}"
           )
 
           if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
-            HEADERS+=(
+            CURL_ARGS+=(
               -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}"
             )
             echo "Vercel automation bypass header: enabled"
@@ -91,6 +89,7 @@ PY
           echo "Mode: ${MODE}"
           echo "Hits per genre: ${HITS_PER_GENRE}"
           echo "Refresh limit: ${REFRESH_LIMIT}"
+
           if [ -n "${GENRES:-}" ]; then
             echo "Genres: ${GENRES}"
           else
@@ -101,7 +100,10 @@ PY
           HEADER_FILE="$(mktemp)"
 
           HTTP_CODE="$(
-            curl -sS -L -X POST "${URL}" "${HEADERS[@]}"               -o "${BODY_FILE}"               -D "${HEADER_FILE}"               -w "%{http_code}"
+            curl "${CURL_ARGS[@]}" \
+              -o "${BODY_FILE}" \
+              -D "${HEADER_FILE}" \
+              -w "%{http_code}"
           )"
 
           echo "HTTP status: ${HTTP_CODE}"
