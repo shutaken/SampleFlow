@@ -291,9 +291,11 @@ export default function Feed({
           ))
         )}
       </main>
-
-      <footer className="affiliate-footer" aria-label="アフィリエイトに関するお知らせ">
-        当サイトはアフィリエイト広告を利用しています。
+      <footer className="affiliate-footer" aria-label="アフィリエイトとクレジットに関するお知らせ">
+        <span>当サイトはアフィリエイト広告を利用しています。</span>
+        <span className="webservice-credit">
+          Powered by <a href="https://affiliate.dmm.com/api/">FANZA Webサービス</a>
+        </span>
       </footer>
     </div>
   );

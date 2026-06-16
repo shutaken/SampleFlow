@@ -59,7 +59,7 @@ export default function VideoCard({ video, sessionId }: Props) {
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
 
   const iframeSrc = extractIframeSrc(video.sample_embed_html);
-  const destinationUrl = video.affiliate_url;
+  const destinationUrl = video.affiliate_url || video.product_url || "#";
 
   useEffect(() => {
     const root = rootRef.current;
@@ -123,7 +123,27 @@ export default function VideoCard({ video, sessionId }: Props) {
   return (
     <article ref={rootRef} className="video-card" aria-label={video.title}>
       <div className="media-area">
-        {isActive && iframeSrc ? (
+        {isActive && video.sample_movie_url ? (
+          <video
+            ref={videoRef}
+            className="sample-video"
+            src={video.sample_movie_url}
+            poster={imageUrl}
+            playsInline
+            muted
+            defaultMuted
+            loop
+            autoPlay
+            preload="auto"
+            onLoadedData={() => {
+              videoRef.current?.play().catch(() => {
+                // Browser autoplay restrictions can reject play(); ignore safely.
+              });
+            }}
+            onEnded={() => void track("ended", sessionId, video.id)}
+            controls
+          />
+        ) : isActive && iframeSrc ? (
           <iframe
             className="sample-iframe"
             src={iframeSrc}
@@ -132,20 +152,6 @@ export default function VideoCard({ video, sessionId }: Props) {
             scrolling="no"
             allow="fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
-          />
-        ) : isActive && video.sample_movie_url ? (
-          <video
-            ref={videoRef}
-            className="sample-video"
-            src={video.sample_movie_url}
-            poster={imageUrl}
-            playsInline
-            muted
-            loop
-            autoPlay
-            preload="auto"
-            onEnded={() => void track("ended", sessionId, video.id)}
-            controls={false}
           />
         ) : imageUrl ? (
           <img className="poster-fallback" src={imageUrl} alt="" />
