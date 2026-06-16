@@ -1,8 +1,1 @@
-{
-  "crons": [
-    {
-      "path": "/api/fanza/fetch?secret=$CRON_SECRET",
-      "schedule": "0 18 * * *"
-    }
-  ]
-}
+{}
