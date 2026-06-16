@@ -21,6 +21,13 @@ function hrefForGenre(name: string) {
   return `/feed?genre=${encodeURIComponent(name)}`;
 }
 
+function liteVideoSrc(providerContentId: string | null | undefined) {
+  if (!providerContentId) return null;
+  return `https://www.dmm.co.jp/litevideo/-/part/=/cid=${encodeURIComponent(
+    providerContentId
+  )}/size=1280_720/`;
+}
+
 function extractIframeSrc(html: string | null | undefined) {
   if (!html) return null;
   const match = html.match(/<iframe[^>]+src=["']([^"']+)["']/i);
@@ -51,14 +58,15 @@ async function track(
 
 export default function VideoCard({ video, sessionId }: Props) {
   const rootRef = useRef<HTMLElement | null>(null);
-  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [isActive, setIsActive] = useState(false);
   const [showInfo, setShowInfo] = useState(false);
 
   const imageUrl =
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
 
-  const iframeSrc = extractIframeSrc(video.sample_embed_html);
+  const iframeSrc =
+    extractIframeSrc(video.sample_embed_html) || liteVideoSrc(video.provider_content_id);
+
   const destinationUrl = video.affiliate_url || "#";
 
   useEffect(() => {
@@ -72,12 +80,9 @@ export default function VideoCard({ video, sessionId }: Props) {
 
         if (active) {
           void track("impression", sessionId, video.id);
-          videoRef.current?.play().catch(() => {
-            // Browser autoplay restrictions can reject play(); ignore safely.
+          void track("player_view", sessionId, video.id, {
+            player: "dmm_litevideo_part_iframe",
           });
-          void track("play", sessionId, video.id);
-        } else {
-          videoRef.current?.pause();
         }
       },
       { threshold: [0, 0.72, 1] }
@@ -123,37 +128,14 @@ export default function VideoCard({ video, sessionId }: Props) {
   return (
     <article ref={rootRef} className="video-card" aria-label={video.title}>
       <div className="media-area">
-        {isActive && video.sample_movie_url ? (
-          <video
-            ref={videoRef}
-            className="sample-video"
-            src={video.sample_movie_url}
-            poster={imageUrl}
-            playsInline
-            muted
-            loop
-            autoPlay
-            preload="auto"
-            onLoadedData={() => {
-              if (videoRef.current) {
-                videoRef.current.muted = true;
-                videoRef.current.volume = 0;
-              }
-              videoRef.current?.play().catch(() => {
-                // Browser autoplay restrictions can reject play(); ignore safely.
-              });
-            }}
-            onEnded={() => void track("ended", sessionId, video.id)}
-            controls
-          />
-        ) : isActive && iframeSrc ? (
+        {isActive && iframeSrc ? (
           <iframe
             className="sample-iframe"
             src={iframeSrc}
             loading="eager"
             title={video.title}
             scrolling="no"
-            allow="fullscreen; encrypted-media; picture-in-picture"
+            allow="autoplay; fullscreen; encrypted-media; picture-in-picture"
             allowFullScreen
           />
         ) : imageUrl ? (
