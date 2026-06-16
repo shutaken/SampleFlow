@@ -23,9 +23,9 @@ function hrefForGenre(name: string) {
 
 function liteVideoSrc(providerContentId: string | null | undefined) {
   if (!providerContentId) return null;
-  return `https://www.dmm.co.jp/litevideo/-/detail/=/cid=${encodeURIComponent(
+  return `https://www.dmm.co.jp/litevideo/-/part/=/cid=${encodeURIComponent(
     providerContentId
-  )}/`;
+  )}/size=1280_720/`;
 }
 
 function extractIframeSrc(html: string | null | undefined) {
@@ -81,7 +81,7 @@ export default function VideoCard({ video, sessionId }: Props) {
         if (active) {
           void track("impression", sessionId, video.id);
           void track("player_view", sessionId, video.id, {
-            player: "dmm_litevideo_iframe",
+            player: "dmm_litevideo_part_iframe",
           });
         }
       },
