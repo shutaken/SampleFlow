@@ -16,6 +16,16 @@ type DmmItem = {
   };
 };
 
+type DmmItemListResponse = {
+  result?: {
+    status?: number;
+    result_count?: number;
+    total_count?: number;
+    first_position?: number;
+    items?: DmmItem[];
+  };
+};
+
 export type NormalizedDmmVideo = {
   providerContentId: string;
   productId: string | null;
@@ -36,6 +46,28 @@ export type NormalizedDmmVideo = {
   raw: DmmItem;
 };
 
+export type FanzaFetchParams = {
+  keyword?: string;
+  cid?: string;
+  hits?: number;
+  offset?: number;
+  sort?: "date" | "rank" | "price" | "review";
+};
+
+export type FanzaFetchResult = {
+  requestUrl: string;
+  responseStatus: number;
+  responseMs: number;
+  rawCount: number;
+  totalCount: number;
+  items: NormalizedDmmVideo[];
+};
+
+function clampHits(value: number | undefined) {
+  if (!value || Number.isNaN(value)) return 100;
+  return Math.min(Math.max(Math.floor(value), 1), 100);
+}
+
 function pickSampleMovieUrl(sampleMovieURL?: Record<string, string>) {
   if (!sampleMovieURL) return null;
   return (
@@ -48,13 +80,23 @@ function pickSampleMovieUrl(sampleMovieURL?: Record<string, string>) {
   );
 }
 
+function toNumber(value: string | undefined) {
+  if (!value) return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+function maskUrl(url: URL, apiId: string, affiliateId: string) {
+  return url.toString().replace(apiId, "***").replace(affiliateId, "***");
+}
+
 export function normalizeDmmItem(item: DmmItem): NormalizedDmmVideo | null {
   const providerContentId = item.content_id;
   const title = item.title;
   const affiliateUrl = item.affiliateURL;
   const sampleMovieUrl = pickSampleMovieUrl(item.sampleMovieURL);
 
-  if (!providerContentId || !title || !affiliateUrl || !sampleMovieUrl) return null;
+  if (!providerContentId || !title || !affiliateUrl) return null;
 
   const maker = item.iteminfo?.maker?.[0]?.name
     ? { id: item.iteminfo.maker[0].id ?? null, name: item.iteminfo.maker[0].name! }
@@ -71,17 +113,31 @@ export function normalizeDmmItem(item: DmmItem): NormalizedDmmVideo | null {
     thumbnailUrl: item.imageURL?.small ?? null,
     listImageUrl: item.imageURL?.list ?? null,
     sampleMovieUrl,
-    hasSample: true,
-    reviewAverage: item.review?.average ? Number(item.review.average) : null,
-    reviewCount: item.review?.count ? Number(item.review.count) : 0,
+    hasSample: Boolean(sampleMovieUrl),
+    reviewAverage: toNumber(item.review?.average),
+    reviewCount: toNumber(item.review?.count) ?? 0,
     maker,
-    genres: item.iteminfo?.genre?.map((g) => ({ id: g.id ?? null, name: g.name ?? "" })).filter((g) => g.name) ?? [],
-    actresses: item.iteminfo?.actress?.map((a) => ({ id: a.id ?? null, name: a.name ?? "", ruby: a.ruby ?? null })).filter((a) => a.name) ?? [],
+    genres:
+      item.iteminfo?.genre
+        ?.map((g) => ({ id: g.id ?? null, name: g.name ?? "" }))
+        .filter((g) => g.name) ?? [],
+    actresses:
+      item.iteminfo?.actress
+        ?.map((a) => ({ id: a.id ?? null, name: a.name ?? "", ruby: a.ruby ?? null }))
+        .filter((a) => a.name) ?? [],
     raw: item,
   };
 }
 
-export async function fetchFanzaNewVideos() {
+export function getDailyFetchGenres() {
+  const raw = process.env.DMM_DAILY_FETCH_GENRES || "巨乳,新人,制服,人妻,VR,フェチ";
+  return raw
+    .split(/[、,\n]/)
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export async function fetchFanzaItemList(params: FanzaFetchParams = {}): Promise<FanzaFetchResult> {
   const apiId = process.env.DMM_API_ID;
   const affiliateId = process.env.DMM_AFFILIATE_ID;
 
@@ -89,26 +145,53 @@ export async function fetchFanzaNewVideos() {
     throw new Error("DMM_API_ID and DMM_AFFILIATE_ID are required.");
   }
 
+  const started = Date.now();
   const url = new URL("https://api.dmm.com/affiliate/v3/ItemList");
   url.searchParams.set("api_id", apiId);
   url.searchParams.set("affiliate_id", affiliateId);
   url.searchParams.set("site", "FANZA");
   url.searchParams.set("service", "digital");
   url.searchParams.set("floor", "videoa");
-  url.searchParams.set("hits", "100");
-  url.searchParams.set("sort", "date");
-  url.searchParams.set("keyword", "巨乳");
+  url.searchParams.set("hits", String(clampHits(params.hits)));
+  url.searchParams.set("sort", params.sort ?? "date");
   url.searchParams.set("output", "json");
 
-  const response = await fetch(url.toString(), { method: "GET", cache: "no-store" });
-  if (!response.ok) throw new Error(`DMM API request failed: ${response.status}`);
+  if (params.offset && params.offset > 1) {
+    url.searchParams.set("offset", String(Math.floor(params.offset)));
+  }
 
-  const json = await response.json();
-  const items: DmmItem[] = json?.result?.items ?? [];
+  if (params.keyword) {
+    url.searchParams.set("keyword", params.keyword);
+  }
+
+  if (params.cid) {
+    url.searchParams.set("cid", params.cid);
+  }
+
+  const response = await fetch(url.toString(), { method: "GET", cache: "no-store" });
+  const responseMs = Date.now() - started;
+
+  if (!response.ok) {
+    throw new Error(`DMM API request failed: ${response.status}`);
+  }
+
+  const json = (await response.json()) as DmmItemListResponse;
+  const items = json?.result?.items ?? [];
 
   return {
-    requestUrl: url.toString().replace(apiId, "***").replace(affiliateId, "***"),
-    items: items.map(normalizeDmmItem).filter(Boolean) as NormalizedDmmVideo[],
+    requestUrl: maskUrl(url, apiId, affiliateId),
+    responseStatus: json?.result?.status ?? response.status,
+    responseMs,
     rawCount: items.length,
+    totalCount: json?.result?.total_count ?? items.length,
+    items: items.map(normalizeDmmItem).filter(Boolean) as NormalizedDmmVideo[],
   };
+}
+
+export async function fetchFanzaNewVideos(keyword = "巨乳", hits = 100) {
+  return fetchFanzaItemList({ keyword, hits, sort: "date" });
+}
+
+export async function fetchFanzaVideoByCid(cid: string) {
+  return fetchFanzaItemList({ cid, hits: 1, sort: "date" });
 }
