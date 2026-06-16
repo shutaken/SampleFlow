@@ -1,51 +1,126 @@
-name: Daily FANZA API Fetch
+name: Fetch FANZA videos
 
 on:
   schedule:
-    # 18:10 UTC = 03:10 JST
+    # 03:10 JST
     - cron: "10 18 * * *"
   workflow_dispatch:
     inputs:
       mode:
-        description: "Fetch mode: daily, new, or refresh"
-        required: false
+        description: "Fetch mode"
+        required: true
         default: "daily"
+        type: choice
+        options:
+          - daily
+          - new
+          - refresh
+      genres:
+        description: "Comma-separated genres. Empty uses app defaults."
+        required: false
+        default: ""
+        type: string
       hitsPerGenre:
-        description: "Number of items to fetch per genre"
+        description: "Hits per genre for new/daily fetch"
         required: false
         default: "50"
+        type: string
       refreshLimit:
-        description: "Number of existing videos to refresh"
+        description: "Existing videos to refresh"
         required: false
         default: "30"
+        type: string
 
 jobs:
-  fetch-fanza:
+  fetch:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
-
     steps:
       - name: Call Sample Flow FANZA fetch endpoint
         env:
           SAMPLE_FLOW_SITE_URL: ${{ secrets.SAMPLE_FLOW_SITE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          # Optional. Required only when Vercel Deployment Protection / Bot Protection returns 401 before the API route.
+          VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
           MODE: ${{ github.event.inputs.mode || 'daily' }}
+          GENRES: ${{ github.event.inputs.genres || '' }}
           HITS_PER_GENRE: ${{ github.event.inputs.hitsPerGenre || '50' }}
           REFRESH_LIMIT: ${{ github.event.inputs.refreshLimit || '30' }}
         run: |
           set -euo pipefail
 
-          if [ -z "${SAMPLE_FLOW_SITE_URL}" ]; then
-            echo "SAMPLE_FLOW_SITE_URL secret is missing"
+          if [ -z "${SAMPLE_FLOW_SITE_URL:-}" ]; then
+            echo "::error::SAMPLE_FLOW_SITE_URL secret is empty."
             exit 1
           fi
 
-          if [ -z "${CRON_SECRET}" ]; then
-            echo "CRON_SECRET secret is missing"
+          if [ -z "${CRON_SECRET:-}" ]; then
+            echo "::error::CRON_SECRET secret is empty."
             exit 1
           fi
 
-          URL="${SAMPLE_FLOW_SITE_URL%/}/api/fanza/fetch?secret=${CRON_SECRET}&mode=${MODE}&hitsPerGenre=${HITS_PER_GENRE}&refreshLimit=${REFRESH_LIMIT}"
+          BASE_URL="${SAMPLE_FLOW_SITE_URL%/}"
+          URL="${BASE_URL}/api/fanza/fetch?mode=${MODE}&hitsPerGenre=${HITS_PER_GENRE}&refreshLimit=${REFRESH_LIMIT}"
+
+          if [ -n "${GENRES:-}" ]; then
+            ENCODED_GENRES="$(python3 - <<'PY'
+import os
+from urllib.parse import quote
+print(quote(os.environ.get("GENRES", ""), safe=""))
+PY
+)"
+            URL="${URL}&genres=${ENCODED_GENRES}"
+          fi
+
+          HEADERS=(
+            -H "content-type: application/json"
+            -H "x-cron-secret: ${CRON_SECRET}"
+            -H "Authorization: Bearer ${CRON_SECRET}"
+          )
+
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            HEADERS+=(
+              -H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}"
+            )
+            echo "Vercel automation bypass header: enabled"
+          else
+            echo "Vercel automation bypass header: not set"
+          fi
 
           echo "Calling fetch endpoint..."
-          curl --fail --show-error --silent --location             --request POST             "$URL"             --header "content-type: application/json"
+          echo "URL host/path: ${BASE_URL}/api/fanza/fetch"
+          echo "Mode: ${MODE}"
+          echo "Hits per genre: ${HITS_PER_GENRE}"
+          echo "Refresh limit: ${REFRESH_LIMIT}"
+          if [ -n "${GENRES:-}" ]; then
+            echo "Genres: ${GENRES}"
+          else
+            echo "Genres: app default"
+          fi
+
+          BODY_FILE="$(mktemp)"
+          HEADER_FILE="$(mktemp)"
+
+          HTTP_CODE="$(
+            curl -sS -L -X POST "${URL}" "${HEADERS[@]}"               -o "${BODY_FILE}"               -D "${HEADER_FILE}"               -w "%{http_code}"
+          )"
+
+          echo "HTTP status: ${HTTP_CODE}"
+          echo "Response body:"
+          cat "${BODY_FILE}"
+          echo
+
+          if [ "${HTTP_CODE}" = "401" ]; then
+            echo "::error::HTTP 401. If CRON_SECRET matches, this is usually Vercel Deployment Protection/Bot Protection. Add VERCEL_AUTOMATION_BYPASS_SECRET to GitHub Secrets and enable Protection Bypass for Automation in Vercel."
+            echo "Response headers summary:"
+            grep -Ei '^(server|x-vercel|location|content-type|www-authenticate):' "${HEADER_FILE}" || true
+            exit 1
+          fi
+
+          if [ "${HTTP_CODE}" -lt 200 ] || [ "${HTTP_CODE}" -ge 300 ]; then
+            echo "::error::Fetch endpoint failed with HTTP ${HTTP_CODE}."
+            echo "Response headers summary:"
+            grep -Ei '^(server|x-vercel|location|content-type|www-authenticate):' "${HEADER_FILE}" || true
+            exit 1
+          fi
+
+          echo "Fetch endpoint completed successfully."
