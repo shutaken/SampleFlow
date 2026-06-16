@@ -59,7 +59,7 @@ export default function VideoCard({ video, sessionId }: Props) {
     video.thumbnail_url || video.package_image_url || video.list_image_url || "";
 
   const iframeSrc = extractIframeSrc(video.sample_embed_html);
-  const destinationUrl = video.affiliate_url || video.product_url || "#";
+  const destinationUrl = video.affiliate_url || "#";
 
   useEffect(() => {
     const root = rootRef.current;
