@@ -131,11 +131,14 @@ export default function VideoCard({ video, sessionId }: Props) {
             poster={imageUrl}
             playsInline
             muted
-            defaultMuted
             loop
             autoPlay
             preload="auto"
             onLoadedData={() => {
+              if (videoRef.current) {
+                videoRef.current.muted = true;
+                videoRef.current.volume = 0;
+              }
               videoRef.current?.play().catch(() => {
                 // Browser autoplay restrictions can reject play(); ignore safely.
               });
