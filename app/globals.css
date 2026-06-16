@@ -144,22 +144,42 @@ button {
 .affiliate-footer {
   position: fixed;
   z-index: 26;
-  left: 12px;
+  right: 12px;
   bottom: max(6px, env(safe-area-inset-bottom));
-  max-width: min(520px, calc(100vw - 24px));
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(720px, calc(100vw - 24px));
   padding: 4px 8px;
   border-radius: 999px;
   background: rgba(0,0,0,0.26);
-  color: rgba(255,255,255,0.52);
+  color: rgba(255,255,255,0.56);
   backdrop-filter: blur(10px);
   font-size: 10px;
   line-height: 1.2;
-  pointer-events: none;
+  pointer-events: auto;
+}
+
+.affiliate-footer a {
+  color: rgba(255,255,255,0.76);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.webservice-credit {
+  white-space: nowrap;
 }
 
 @media (orientation: portrait) {
   .affiliate-footer {
-    display: none;
+    left: 12px;
+    right: 12px;
+    bottom: max(4px, env(safe-area-inset-bottom));
+    justify-content: center;
+    gap: 6px;
+    padding: 3px 7px;
+    font-size: 9px;
+    opacity: 0.58;
   }
 }
 
@@ -169,7 +189,7 @@ button {
     left: auto;
     bottom: max(6px, env(safe-area-inset-bottom));
     font-size: 9px;
-    opacity: 0.54;
+    opacity: 0.58;
   }
 }
 
