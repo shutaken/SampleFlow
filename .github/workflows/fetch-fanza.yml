@@ -1,0 +1,51 @@
+name: Daily FANZA API Fetch
+
+on:
+  schedule:
+    # 18:10 UTC = 03:10 JST
+    - cron: "10 18 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Fetch mode: daily, new, or refresh"
+        required: false
+        default: "daily"
+      hitsPerGenre:
+        description: "Number of items to fetch per genre"
+        required: false
+        default: "50"
+      refreshLimit:
+        description: "Number of existing videos to refresh"
+        required: false
+        default: "30"
+
+jobs:
+  fetch-fanza:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Call Sample Flow FANZA fetch endpoint
+        env:
+          SAMPLE_FLOW_SITE_URL: ${{ secrets.SAMPLE_FLOW_SITE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+          MODE: ${{ github.event.inputs.mode || 'daily' }}
+          HITS_PER_GENRE: ${{ github.event.inputs.hitsPerGenre || '50' }}
+          REFRESH_LIMIT: ${{ github.event.inputs.refreshLimit || '30' }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${SAMPLE_FLOW_SITE_URL}" ]; then
+            echo "SAMPLE_FLOW_SITE_URL secret is missing"
+            exit 1
+          fi
+
+          if [ -z "${CRON_SECRET}" ]; then
+            echo "CRON_SECRET secret is missing"
+            exit 1
+          fi
+
+          URL="${SAMPLE_FLOW_SITE_URL%/}/api/fanza/fetch?secret=${CRON_SECRET}&mode=${MODE}&hitsPerGenre=${HITS_PER_GENRE}&refreshLimit=${REFRESH_LIMIT}"
+
+          echo "Calling fetch endpoint..."
+          curl --fail --show-error --silent --location             --request POST             "$URL"             --header "content-type: application/json"
