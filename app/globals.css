@@ -767,3 +767,30 @@ button {
   background: rgba(255,255,255,0.06);
   color: rgba(255,255,255,0.72);
 }
+
+/* =========================================================
+   Approved update: list navigation / multi genre UX
+   ========================================================= */
+
+.list-nav-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
+.genre-chip[aria-pressed="true"] {
+  border-color: rgba(255,255,255,0.72);
+}
+
+@media (max-width: 520px) {
+  .topbar-nav {
+    gap: 6px;
+  }
+
+  .topbar-link,
+  .topbar-title {
+    padding: 5px 8px;
+    font-size: 11px;
+  }
+}
