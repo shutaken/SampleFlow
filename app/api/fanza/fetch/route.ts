@@ -26,11 +26,6 @@ type ExistingVideo = {
 
 const DEFAULT_REFRESH_LIMIT = 50;
 
-function getHideAfterMissingCount() {
-  const parsed = Number.parseInt(process.env.DMM_MISSING_HIDE_THRESHOLD ?? "3", 10);
-  return Number.isFinite(parsed) ? Math.max(parsed, 1) : 3;
-}
-
 function slugifyGenre(name: string) {
   const fixed: Record<string, string> = {
     巨乳: "big-bust",
@@ -288,21 +283,17 @@ async function refreshExistingVideos(
 
     stats.missingCount += 1;
     const nextMissingCount = ((row.api_missing_count as number | null) ?? 0) + 1;
-    const shouldHide = nextMissingCount >= getHideAfterMissingCount();
-    const updatePayload: Record<string, unknown> = {
-      last_api_checked_at: new Date().toISOString(),
-      api_missing_count: nextMissingCount,
-    };
-
-    if (shouldHide) updatePayload.is_hidden = true;
-
     const updateResult = await supabaseAdmin
       .from("videos")
-      .update(updatePayload)
+      .update({
+        last_api_checked_at: new Date().toISOString(),
+        api_missing_count: nextMissingCount,
+        // 蓄積重視のため、CID検索でAPIに返らないだけでは非表示化しない。
+        // 実際にFANZAサイトから削除された動画の扱いは別改修で判定する。
+      })
       .eq("id", row.id);
 
     if (updateResult.error) throw updateResult.error;
-    if (shouldHide) stats.hiddenCount += 1;
   }
 }
 
