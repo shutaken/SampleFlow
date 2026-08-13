@@ -34,9 +34,34 @@ function getSessionId() {
   return id;
 }
 
-function getInitialGenre() {
-  if (typeof window === "undefined") return "";
-  return new URLSearchParams(window.location.search).get("genre") ?? "";
+function unique(values: string[]) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+function parseGenreParams(searchParams: URLSearchParams) {
+  const multi = searchParams.get("genres") ?? "";
+  const single = searchParams.get("genre") ?? "";
+  return unique([...multi.split(/[、,]/), single]);
+}
+
+function sortSelectedGenres(values: string[]) {
+  return [...values].sort((a, b) => {
+    const ai = PRIORITY_GENRES.indexOf(a);
+    const bi = PRIORITY_GENRES.indexOf(b);
+
+    if (ai !== -1 || bi !== -1) {
+      if (ai === -1) return 1;
+      if (bi === -1) return -1;
+      return ai - bi;
+    }
+
+    return a.localeCompare(b, "ja");
+  });
+}
+
+function getInitialGenres() {
+  if (typeof window === "undefined") return [];
+  return sortSelectedGenres(parseGenreParams(new URLSearchParams(window.location.search)));
 }
 
 function sortGenres(rows: GenreRow[]) {
@@ -64,7 +89,7 @@ export default function Feed({
   const [videos, setVideos] = useState<FeedVideo[]>([]);
   const [adCards, setAdCards] = useState<AdCard[]>([]);
   const [genres, setGenres] = useState<GenreRow[]>([]);
-  const [selectedGenre, setSelectedGenre] = useState("");
+  const [selectedGenres, setSelectedGenres] = useState<string[]>([]);
   const [showGenreMenu, setShowGenreMenu] = useState(true);
   const [loading, setLoading] = useState(true);
 
@@ -89,7 +114,7 @@ export default function Feed({
   }
 
   useEffect(() => {
-    setSelectedGenre(getInitialGenre());
+    setSelectedGenres(getInitialGenres());
   }, []);
 
   useEffect(() => {
@@ -134,7 +159,7 @@ export default function Feed({
     }, 700);
 
     return () => window.clearTimeout(timer);
-  }, [showGenreChips, selectedGenre, actressName]);
+  }, [showGenreChips, selectedGenres, actressName]);
 
   useEffect(() => {
     let mounted = true;
@@ -149,8 +174,9 @@ export default function Feed({
         .order("created_at", { ascending: false })
         .limit(100);
 
-      if (selectedGenre) {
-        query = query.contains("genres", [selectedGenre]);
+      if (selectedGenres.length > 0) {
+        // AND条件: 指定した全ジャンルを含む動画のみ表示。
+        query = query.contains("genres", selectedGenres);
       }
 
       if (actressName) {
@@ -180,7 +206,7 @@ export default function Feed({
     return () => {
       mounted = false;
     };
-  }, [selectedGenre, actressName]);
+  }, [selectedGenres, actressName]);
 
   const items = useMemo(() => {
     const result: FeedItem[] = [];
@@ -196,20 +222,41 @@ export default function Feed({
     return result;
   }, [videos, adCards]);
 
-  function selectGenre(genreName: string) {
-    setSelectedGenre(genreName);
+  function updateUrl(nextGenres: string[]) {
+    if (typeof window === "undefined") return;
+
+    const url = new URL(window.location.href);
+    url.searchParams.delete("genre");
+    url.searchParams.delete("genres");
+
+    if (nextGenres.length === 1) {
+      url.searchParams.set("genre", nextGenres[0]);
+    } else if (nextGenres.length > 1) {
+      url.searchParams.set("genres", nextGenres.join(","));
+    }
+
+    window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  }
+
+  function setGenresSelection(nextGenres: string[]) {
+    const normalized = sortSelectedGenres(unique(nextGenres));
+    setSelectedGenres(normalized);
+    updateUrl(normalized);
     revealGenreMenu();
     hideGenreMenuAfterDelay(1600);
+  }
 
-    if (typeof window !== "undefined") {
-      const url = new URL(window.location.href);
-      if (genreName) {
-        url.searchParams.set("genre", genreName);
-      } else {
-        url.searchParams.delete("genre");
-      }
-      window.history.pushState({}, "", `${url.pathname}${url.search}${url.hash}`);
+  function toggleGenre(genreName: string) {
+    if (!genreName) {
+      setGenresSelection([]);
+      return;
     }
+
+    const nextGenres = selectedGenres.includes(genreName)
+      ? selectedGenres.filter((name) => name !== genreName)
+      : [...selectedGenres, genreName];
+
+    setGenresSelection(nextGenres);
   }
 
   return (
@@ -219,6 +266,7 @@ export default function Feed({
         <nav className="topbar-nav" aria-label="メインナビゲーション">
           {titlePrefix ? <span className="topbar-title">{titlePrefix}</span> : null}
           <a href="/actresses" className="topbar-link">女優一覧</a>
+          <a href="/genres" className="topbar-link">ジャンル一覧</a>
         </nav>
       </header>
 
@@ -243,8 +291,8 @@ export default function Feed({
           >
             <button
               type="button"
-              className={`genre-chip ${selectedGenre === "" ? "is-active" : ""}`}
-              onClick={() => selectGenre("")}
+              className={`genre-chip ${selectedGenres.length === 0 ? "is-active" : ""}`}
+              onClick={() => toggleGenre("")}
             >
               すべて
             </button>
@@ -252,8 +300,9 @@ export default function Feed({
               <button
                 type="button"
                 key={genre.name}
-                className={`genre-chip ${selectedGenre === genre.name ? "is-active" : ""}`}
-                onClick={() => selectGenre(genre.name)}
+                className={`genre-chip ${selectedGenres.includes(genre.name) ? "is-active" : ""}`}
+                onClick={() => toggleGenre(genre.name)}
+                aria-pressed={selectedGenres.includes(genre.name)}
               >
                 {genre.name}
               </button>
@@ -276,7 +325,7 @@ export default function Feed({
             <div className="pr-card">
               <span className="pr-label">No results</span>
               <h2>動画が見つかりません</h2>
-              <p>別のジャンル、または女優一覧から選び直してください。</p>
+              <p>ジャンルを減らす、または女優一覧から選び直してください。</p>
             </div>
           </section>
         ) : (
